@@ -21,26 +21,30 @@ function downloadImage(url) {
 
 app.post('/combine', async (req, res) => {
   try {
-    const { baseImage, logoImage, baseImageUrl, logoImageUrl, logoSize = 10, padding = 40 } = req.body;
+    const { 
+      baseImage, 
+      logoImage, 
+      baseImageUrl, 
+      logoImageUrl, 
+      logoSize = 10, 
+      padding = 40,
+      position = 'bottom-right'
+    } = req.body;
     
     // Support both base64 and URLs
     let baseBuffer, logoBuffer;
     
     if (baseImage) {
-      // Base64 provided
       baseBuffer = Buffer.from(baseImage, 'base64');
     } else if (baseImageUrl) {
-      // URL provided
       baseBuffer = await downloadImage(baseImageUrl);
     } else {
       return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
     if (logoImage) {
-      // Base64 provided
       logoBuffer = Buffer.from(logoImage, 'base64');
     } else if (logoImageUrl) {
-      // URL provided
       logoBuffer = await downloadImage(logoImageUrl);
     } else {
       return res.status(400).json({ error: 'Missing logoImage or logoImageUrl' });
@@ -52,12 +56,43 @@ app.post('/combine', async (req, res) => {
     const canvas = createCanvas(baseImg.width, baseImg.height);
     const ctx = canvas.getContext('2d');
     
+    // Draw base image
     ctx.drawImage(baseImg, 0, 0);
     
+    // Calculate logo dimensions
     const logoW = baseImg.width * (logoSize / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    ctx.drawImage(logoImg, baseImg.width - logoW - padding, baseImg.height - logoH - padding, logoW, logoH);
+    // Parse position (supports: top, bottom, left, right, center, and combinations)
+    let x, y;
+    const pos = position.toLowerCase().trim();
+    
+    // Vertical positioning
+    if (pos.includes('top')) {
+      y = padding;
+    } else if (pos.includes('bottom')) {
+      y = baseImg.height - logoH - padding;
+    } else if (pos.includes('center') || pos.includes('middle')) {
+      y = (baseImg.height - logoH) / 2;
+    } else {
+      // Default to bottom
+      y = baseImg.height - logoH - padding;
+    }
+    
+    // Horizontal positioning
+    if (pos.includes('left')) {
+      x = padding;
+    } else if (pos.includes('right')) {
+      x = baseImg.width - logoW - padding;
+    } else if (pos.includes('center') || pos.includes('middle')) {
+      x = (baseImg.width - logoW) / 2;
+    } else {
+      // Default to right
+      x = baseImg.width - logoW - padding;
+    }
+    
+    // Draw logo
+    ctx.drawImage(logoImg, x, y, logoW, logoH);
     
     const final = canvas.toBuffer('image/png').toString('base64');
     
@@ -68,7 +103,28 @@ app.post('/combine', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Image combiner API running' });
+  res.json({ 
+    status: 'Image combiner API running',
+    usage: {
+      endpoint: '/combine',
+      method: 'POST',
+      parameters: {
+        baseImage: 'base64 string (required if baseImageUrl not provided)',
+        logoImage: 'base64 string (required if logoImageUrl not provided)',
+        baseImageUrl: 'URL string (alternative to baseImage)',
+        logoImageUrl: 'URL string (alternative to logoImage)',
+        logoSize: 'number (percentage of base image width, default: 10)',
+        padding: 'number (pixels from edge, default: 40)',
+        position: 'string (default: bottom-right)'
+      },
+      positionOptions: [
+        'top-left', 'top-right', 'top-center',
+        'bottom-left', 'bottom-right', 'bottom-center',
+        'center-left', 'center-right', 'center',
+        'left', 'right', 'top', 'bottom'
+      ]
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
