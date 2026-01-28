@@ -28,6 +28,8 @@ app.post('/combine', async (req, res) => {
       logoImageUrl, 
       logoSize = 10, 
       padding = 40,
+      paddingX,
+      paddingY,
       position = 'bottom-right'
     } = req.body;
     
@@ -63,32 +65,36 @@ app.post('/combine', async (req, res) => {
     const logoW = baseImg.width * (logoSize / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // Parse position (supports: top, bottom, left, right, center, and combinations)
+    // Use separate padding for X and Y if provided, otherwise use padding
+    const padX = paddingX !== undefined ? paddingX : padding;
+    const padY = paddingY !== undefined ? paddingY : padding;
+    
+    // Parse position
     let x, y;
     const pos = position.toLowerCase().trim();
     
     // Vertical positioning
     if (pos.includes('top')) {
-      y = padding;
+      y = padY;
     } else if (pos.includes('bottom')) {
-      y = baseImg.height - logoH - padding;
+      y = baseImg.height - logoH - padY;
     } else if (pos.includes('center') || pos.includes('middle')) {
       y = (baseImg.height - logoH) / 2;
     } else {
       // Default to bottom
-      y = baseImg.height - logoH - padding;
+      y = baseImg.height - logoH - padY;
     }
     
     // Horizontal positioning
     if (pos.includes('left')) {
-      x = padding;
+      x = padX;
     } else if (pos.includes('right')) {
-      x = baseImg.width - logoW - padding;
+      x = baseImg.width - logoW - padX;
     } else if (pos.includes('center') || pos.includes('middle')) {
       x = (baseImg.width - logoW) / 2;
     } else {
       // Default to right
-      x = baseImg.width - logoW - padding;
+      x = baseImg.width - logoW - padX;
     }
     
     // Draw logo
@@ -105,6 +111,7 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
+    version: '1.0.0',
     usage: {
       endpoint: '/combine',
       method: 'POST',
@@ -115,13 +122,37 @@ app.get('/', (req, res) => {
         logoImageUrl: 'URL string (alternative to logoImage)',
         logoSize: 'number (percentage of base image width, default: 10)',
         padding: 'number (pixels from edge, default: 40)',
+        paddingX: 'number (horizontal padding, overrides padding)',
+        paddingY: 'number (vertical padding, overrides padding)',
         position: 'string (default: bottom-right)'
       },
       positionOptions: [
-        'top-left', 'top-right', 'top-center',
-        'bottom-left', 'bottom-right', 'bottom-center',
-        'center-left', 'center-right', 'center',
-        'left', 'right', 'top', 'bottom'
+        'top-left', 'top-right', 'top-center', 'top',
+        'bottom-left', 'bottom-right', 'bottom-center', 'bottom',
+        'center-left', 'center-right', 'center', 'middle',
+        'left', 'right'
+      ],
+      examples: [
+        {
+          description: 'Logo at top-right, very close to edge',
+          body: {
+            baseImage: 'base64...',
+            logoImage: 'base64...',
+            logoSize: 15,
+            paddingX: 20,
+            paddingY: 5,
+            position: 'top right'
+          }
+        },
+        {
+          description: 'Large logo centered',
+          body: {
+            baseImageUrl: 'https://example.com/image.jpg',
+            logoImageUrl: 'https://example.com/logo.png',
+            logoSize: 30,
+            position: 'center'
+          }
+        }
       ]
     }
   });
