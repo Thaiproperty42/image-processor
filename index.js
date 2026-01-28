@@ -21,15 +21,30 @@ function downloadImage(url) {
 
 app.post('/combine', async (req, res) => {
   try {
-    const { baseImageUrl, logoImageUrl, logoSize = 10, padding = 40 } = req.body;
+    const { baseImage, logoImage, baseImageUrl, logoImageUrl, logoSize = 10, padding = 40 } = req.body;
     
-    if (!baseImageUrl || !logoImageUrl) {
-      return res.status(400).json({ error: 'Missing baseImageUrl or logoImageUrl' });
+    // Support both base64 and URLs
+    let baseBuffer, logoBuffer;
+    
+    if (baseImage) {
+      // Base64 provided
+      baseBuffer = Buffer.from(baseImage, 'base64');
+    } else if (baseImageUrl) {
+      // URL provided
+      baseBuffer = await downloadImage(baseImageUrl);
+    } else {
+      return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
-    // Download images from URLs
-    const baseBuffer = await downloadImage(baseImageUrl);
-    const logoBuffer = await downloadImage(logoImageUrl);
+    if (logoImage) {
+      // Base64 provided
+      logoBuffer = Buffer.from(logoImage, 'base64');
+    } else if (logoImageUrl) {
+      // URL provided
+      logoBuffer = await downloadImage(logoImageUrl);
+    } else {
+      return res.status(400).json({ error: 'Missing logoImage or logoImageUrl' });
+    }
     
     const baseImg = await loadImage(baseBuffer);
     const logoImg = await loadImage(logoBuffer);
