@@ -1,4 +1,17 @@
-const express = require('express');
+{
+  "success": true,
+  "image": "base64...",
+  "debug": {
+    "logoSize": 70,
+    "paddingX": 30,
+    "paddingY": 0,  // ← Shows actual padding used (no more auto-upgrade)
+    "position": "top-right",
+    "finalX": 1850,
+    "finalY": 0,    // ← Shows exact pixel position
+    "logoWidth": 300,
+    "logoHeight": 80
+  }
+}const express = require('express');
 const { createCanvas, loadImage } = require('canvas');
 const https = require('https');
 const http = require('http');
