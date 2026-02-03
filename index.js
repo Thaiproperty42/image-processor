@@ -26,11 +26,12 @@ app.post('/combine', async (req, res) => {
       baseImageUrl, 
       logoImageUrl, 
       logoSize = 10, 
-      basePadding = 30,  // ✅ BASE PADDING VALUE
-      position = 'bottom-right'
+      offsetX = 0,  // ✅ MANUAL X OFFSET FROM EDGE
+      offsetY = 0,  // ✅ MANUAL Y OFFSET FROM EDGE
+      position = 'top-right'
     } = req.body;
     
-    console.log('📥 Received:', { logoSize, basePadding, position });
+    console.log('📥 Received:', { logoSize, offsetX, offsetY, position });
     
     let baseBuffer, logoBuffer;
     
@@ -71,124 +72,67 @@ app.post('/combine', async (req, res) => {
     // Calculate logo dimensions
     const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
-    const basePad = Number(basePadding);
+    
+    const offX = Number(offsetX);
+    const offY = Number(offsetY);
     
     console.log('📐 Dimensions:', {
       base: `${baseImg.width}x${baseImg.height}`,
       logo: `${Math.round(logoW)}x${Math.round(logoH)}`,
-      basePadding: basePad
+      offsetX: offX,
+      offsetY: offY
     });
     
-    // ✅ SMART PADDING LOGIC
+    // ✅ SIMPLE POSITION CALCULATION
     let x, y;
     
-    // Step 1: Calculate base position (where logo WANTS to be)
-    let baseX, baseY;
-    
-    // Y position preference
+    // Y position (vertical) - DISTANCE FROM EDGE
     if (pos.indexOf('top') >= 0) {
-      baseY = basePad;
+      y = offY;  // Distance from TOP edge
+      console.log('✅ TOP: y = offsetY =', y);
     } else if (pos.indexOf('bottom') >= 0) {
-      baseY = baseImg.height - logoH - basePad;
+      y = baseImg.height - logoH - offY;  // Distance from BOTTOM edge
+      console.log('✅ BOTTOM: y = height - logoH - offsetY =', y);
     } else {
-      baseY = (baseImg.height - logoH) / 2;
+      y = (baseImg.height - logoH) / 2;
+      console.log('✅ CENTER: y =', y);
     }
     
-    // X position preference
+    // X position (horizontal) - DISTANCE FROM EDGE
     if (pos.indexOf('right') >= 0) {
-      baseX = baseImg.width - logoW - basePad;
+      x = baseImg.width - logoW - offX;  // Distance from RIGHT edge
+      console.log('✅ RIGHT: x = width - logoW - offsetX =', x);
     } else if (pos.indexOf('left') >= 0) {
-      baseX = basePad;
+      x = offX;  // Distance from LEFT edge
+      console.log('✅ LEFT: x = offsetX =', x);
     } else {
-      baseX = (baseImg.width - logoW) / 2;
+      x = (baseImg.width - logoW) / 2;
+      console.log('✅ CENTER: x =', x);
     }
     
-    console.log('📍 Base position (before smart padding):', {
-      x: Math.round(baseX),
-      y: Math.round(baseY)
-    });
+    // Calculate logo center point
+    const logoCenterX = x + (logoW / 2);
+    const logoCenterY = y + (logoH / 2);
     
-    // Step 2: Calculate logo CENTER point
-    const logoCenterX = baseX + (logoW / 2);
-    const logoCenterY = baseY + (logoH / 2);
+    // Calculate distances from logo center to edges
+    const distFromTop = logoCenterY;
+    const distFromBottom = baseImg.height - logoCenterY;
+    const distFromLeft = logoCenterX;
+    const distFromRight = baseImg.width - logoCenterX;
     
-    console.log('🎯 Logo center point:', {
+    console.log('🎯 Logo center:', {
       x: Math.round(logoCenterX),
       y: Math.round(logoCenterY)
     });
     
-    // Step 3: Calculate distances from center to all edges
-    const distTop = logoCenterY;
-    const distBottom = baseImg.height - logoCenterY;
-    const distLeft = logoCenterX;
-    const distRight = baseImg.width - logoCenterX;
-    
-    console.log('📏 Distances from logo center to edges:', {
-      top: Math.round(distTop),
-      bottom: Math.round(distBottom),
-      left: Math.round(distLeft),
-      right: Math.round(distRight)
+    console.log('📏 Distance from logo center to edges:', {
+      top: Math.round(distFromTop),
+      bottom: Math.round(distFromBottom),
+      left: Math.round(distFromLeft),
+      right: Math.round(distFromRight)
     });
     
-    // Step 4: Find closest edges
-    const verticalMin = Math.min(distTop, distBottom);
-    const horizontalMin = Math.min(distLeft, distRight);
-    
-    console.log('🔍 Closest edges:', {
-      vertical: verticalMin === distTop ? 'TOP' : 'BOTTOM',
-      horizontal: horizontalMin === distLeft ? 'LEFT' : 'RIGHT',
-      verticalDist: Math.round(verticalMin),
-      horizontalDist: Math.round(horizontalMin)
-    });
-    
-    // Step 5: Apply smart padding adjustment
-    // The closer to an edge, the MORE we reduce padding
-    const maxDistanceForAdjustment = 500; // pixels
-    
-    let paddingAdjustmentY = 0;
-    let paddingAdjustmentX = 0;
-    
-    // Vertical adjustment (closer to top/bottom = less padding)
-    if (verticalMin < maxDistanceForAdjustment) {
-      const ratio = 1 - (verticalMin / maxDistanceForAdjustment); // 0 to 1
-      paddingAdjustmentY = basePad * ratio * 0.8; // Reduce up to 80% of padding
-      
-      if (distTop < distBottom) {
-        // Closer to TOP - reduce top padding
-        baseY = baseY - paddingAdjustmentY;
-      } else {
-        // Closer to BOTTOM - reduce bottom padding
-        baseY = baseY + paddingAdjustmentY;
-      }
-    }
-    
-    // Horizontal adjustment (closer to left/right = less padding)
-    if (horizontalMin < maxDistanceForAdjustment) {
-      const ratio = 1 - (horizontalMin / maxDistanceForAdjustment); // 0 to 1
-      paddingAdjustmentX = basePad * ratio * 0.8; // Reduce up to 80% of padding
-      
-      if (distLeft < distRight) {
-        // Closer to LEFT - reduce left padding
-        baseX = baseX - paddingAdjustmentX;
-      } else {
-        // Closer to RIGHT - reduce right padding
-        baseX = baseX + paddingAdjustmentX;
-      }
-    }
-    
-    console.log('⚡ Smart padding adjustments:', {
-      x: Math.round(paddingAdjustmentX),
-      y: Math.round(paddingAdjustmentY)
-    });
-    
-    // Step 6: Final position
-    x = baseX;
-    y = baseY;
-    
-    console.log('🎯 Final position (after smart padding):', {
-      x: Math.round(x),
-      y: Math.round(y)
-    });
+    console.log('🎯 Final position:', { x: Math.round(x), y: Math.round(y) });
     
     // Draw logo
     ctx.drawImage(logoImg, x, y, logoW, logoH);
@@ -200,24 +144,23 @@ app.post('/combine', async (req, res) => {
       image: final,
       debug: {
         position: pos,
-        finalX: Math.round(x),
-        finalY: Math.round(y),
+        logoTopLeftCorner: {
+          x: Math.round(x),
+          y: Math.round(y)
+        },
         logoCenter: {
           x: Math.round(logoCenterX),
           y: Math.round(logoCenterY)
         },
-        edgeDistances: {
-          top: Math.round(distTop),
-          bottom: Math.round(distBottom),
-          left: Math.round(distLeft),
-          right: Math.round(distRight)
-        },
-        paddingAdjustments: {
-          x: Math.round(paddingAdjustmentX),
-          y: Math.round(paddingAdjustmentY)
+        distanceFromCenterToEdges: {
+          top: Math.round(distFromTop),
+          bottom: Math.round(distFromBottom),
+          left: Math.round(distFromLeft),
+          right: Math.round(distFromRight)
         },
         logoSize: `${Math.round(logoW)}x${Math.round(logoH)}`,
-        basePadding: basePad
+        offsetX: offX,
+        offsetY: offY
       }
     });
   } catch (error) {
@@ -228,23 +171,31 @@ app.post('/combine', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({ 
-    status: 'Image Combiner API v6.0 - Smart Padding',
+    status: 'Image Combiner API v7.0 - Manual Offset Control',
     features: [
-      '✅ Smart padding based on logo center distance to edges',
-      '✅ Closer to edge = automatically less padding',
-      '✅ Farther from edge = full padding maintained',
-      '✅ Works for all 9 positions'
+      '✅ offsetX = distance from LEFT/RIGHT edge (pixels)',
+      '✅ offsetY = distance from TOP/BOTTOM edge (pixels)',
+      '✅ Returns logo center point coordinates',
+      '✅ Returns distances from logo center to all edges',
+      '⚠️ Logo can go outside frame - you have full control'
     ],
     usage: {
       endpoint: '/combine',
       parameters: {
-        logoSize: 'number (% of base width)',
-        basePadding: 'number (base padding, auto-adjusts based on position)',
-        position: 'string (top-left, top-right, center, etc.)'
+        logoSize: 'number (% of base width, default: 10)',
+        offsetX: 'number (pixels from horizontal edge, default: 0)',
+        offsetY: 'number (pixels from vertical edge, default: 0)',
+        position: 'string (determines which edges offsetX/offsetY measure from)'
+      },
+      examples: {
+        'top-right': 'offsetX = distance from RIGHT, offsetY = distance from TOP',
+        'top-left': 'offsetX = distance from LEFT, offsetY = distance from TOP',
+        'bottom-right': 'offsetX = distance from RIGHT, offsetY = distance from BOTTOM',
+        'bottom-left': 'offsetX = distance from LEFT, offsetY = distance from BOTTOM'
       }
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Smart Padding API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Manual Offset API running on port ${PORT}`));
