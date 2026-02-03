@@ -27,21 +27,16 @@ app.post('/combine', async (req, res) => {
       baseImageUrl, 
       logoImageUrl, 
       logoSize = 10, 
-      padding = 40,
-      paddingX,
-      paddingY,
+      paddingX = 0,
+      paddingY = 0,
       position = 'bottom-right'
     } = req.body;
     
-    // DEBUG: Log incoming values
     console.log('Received params:', {
       logoSize,
-      padding,
       paddingX,
       paddingY,
-      position,
-      paddingXType: typeof paddingX,
-      paddingYType: typeof paddingY
+      position
     });
     
     // Support both base64 and URLs
@@ -55,7 +50,7 @@ app.post('/combine', async (req, res) => {
       return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
-    // Check if position is 'none' - if so, skip logo processing
+    // Check if position is 'none'
     const pos = position.toLowerCase().trim();
     if (pos === 'none') {
       const baseImg = await loadImage(baseBuffer);
@@ -83,16 +78,15 @@ app.post('/combine', async (req, res) => {
     // Draw base image
     ctx.drawImage(baseImg, 0, 0);
     
-    // Calculate logo dimensions
-    const logoW = baseImg.width * (logoSize / 100);
+    // Calculate logo dimensions based on logoSize percentage
+    const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // Force numeric conversion and handle 0 explicitly
-    const padX = paddingX !== undefined && paddingX !== null ? Number(paddingX) : padding;
-    const padY = paddingY !== undefined && paddingY !== null ? Number(paddingY) : padding;
+    // Convert padding to numbers (can be 0)
+    const padX = Number(paddingX);
+    const padY = Number(paddingY);
     
-    // DEBUG: Log calculated values
-    console.log('Calculated values:', {
+    console.log('Calculated:', {
       baseWidth: baseImg.width,
       baseHeight: baseImg.height,
       logoW,
@@ -101,34 +95,39 @@ app.post('/combine', async (req, res) => {
       padY
     });
     
-    // Parse position
+    // Position calculation
+    // paddingX and paddingY are OFFSETS from the corner
+    // 0,0 = exactly at corner
+    // positive values = move INWARD from edge
+    
     let x, y;
     
-    // Vertical positioning
     if (pos.includes('top')) {
+      // Top edge: y = 0 + offset
       y = padY;
     } else if (pos.includes('bottom')) {
+      // Bottom edge: start from bottom, move UP by logo height, then apply offset INWARD
       y = baseImg.height - logoH - padY;
     } else if (pos.includes('center') || pos.includes('middle')) {
-      y = (baseImg.height - logoH) / 2;
+      y = (baseImg.height - logoH) / 2 + padY;
     } else {
-      // Default to bottom
+      // Default bottom
       y = baseImg.height - logoH - padY;
     }
     
-    // Horizontal positioning
     if (pos.includes('left')) {
+      // Left edge: x = 0 + offset
       x = padX;
     } else if (pos.includes('right')) {
+      // Right edge: start from right, move LEFT by logo width, then apply offset INWARD
       x = baseImg.width - logoW - padX;
     } else if (pos.includes('center') || pos.includes('middle')) {
-      x = (baseImg.width - logoW) / 2;
+      x = (baseImg.width - logoW) / 2 + padX;
     } else {
-      // Default to right
+      // Default right
       x = baseImg.width - logoW - padX;
     }
     
-    // DEBUG: Log final position
     console.log('Final position:', { x, y, position: pos });
     
     // Draw logo
@@ -140,12 +139,14 @@ app.post('/combine', async (req, res) => {
       success: true, 
       image: final,
       debug: {
-        logoSize,
+        logoSize: Number(logoSize),
         padX,
         padY,
         position: pos,
-        finalX: x,
-        finalY: y
+        finalX: Math.round(x),
+        finalY: Math.round(y),
+        logoWidth: Math.round(logoW),
+        logoHeight: Math.round(logoH)
       }
     });
   } catch (error) {
@@ -157,64 +158,64 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
-    version: '1.0.1',
+    version: '2.0.0',
     usage: {
       endpoint: '/combine',
       method: 'POST',
       parameters: {
-        baseImage: 'base64 string (required if baseImageUrl not provided)',
-        logoImage: 'base64 string (required if logoImageUrl not provided)',
-        baseImageUrl: 'URL string (alternative to baseImage)',
-        logoImageUrl: 'URL string (alternative to logoImage)',
-        logoSize: 'number (percentage of base image width, default: 10)',
-        padding: 'number (pixels from edge, default: 40)',
-        paddingX: 'number (horizontal padding, overrides padding, can be 0)',
-        paddingY: 'number (vertical padding, overrides padding, can be 0)',
+        baseImage: 'base64 string OR',
+        baseImageUrl: 'URL string',
+        logoImage: 'base64 string OR',
+        logoImageUrl: 'URL string',
+        logoSize: 'number (% of base width, default: 10)',
+        paddingX: 'number (pixels from edge, 0 = corner, default: 0)',
+        paddingY: 'number (pixels from edge, 0 = corner, default: 0)',
         position: 'string (default: bottom-right)'
       },
+      paddingLogic: {
+        'bottom-right': 'paddingX=0, paddingY=0 → logo sits exactly at bottom-right corner',
+        'bottom-right': 'paddingX=20, paddingY=10 → logo moves 20px left from right edge, 10px up from bottom',
+        'top-left': 'paddingX=0, paddingY=0 → logo sits exactly at top-left corner',
+        'top-left': 'paddingX=15, paddingY=15 → logo moves 15px inward from both edges'
+      },
       positionOptions: [
-        'top-left', 'top-right', 'top-center', 'top',
-        'bottom-left', 'bottom-right', 'bottom-center', 'bottom',
-        'center-left', 'center-right', 'center', 'middle',
-        'left', 'right', 'none'
+        'top-left', 'top-right', 'top-center',
+        'bottom-left', 'bottom-right', 'bottom-center',
+        'center-left', 'center-right', 'center',
+        'none (no logo)'
       ],
       examples: [
         {
-          description: 'Logo at bottom-right with no padding (at edge)',
+          description: 'Logo at exact bottom-right corner',
           body: {
-            baseImageUrl: 'https://example.com/image.jpg',
+            baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 60,
+            logoSize: 15,
             paddingX: 0,
             paddingY: 0,
             position: 'bottom-right'
           }
         },
         {
-          description: 'Logo at top-right with padding',
+          description: 'Logo 20px from right, 10px from bottom',
           body: {
-            baseImage: 'base64...',
-            logoImage: 'base64...',
-            logoSize: 15,
-            paddingX: 20,
-            paddingY: 5,
-            position: 'top right'
-          }
-        },
-        {
-          description: 'Large logo centered',
-          body: {
-            baseImageUrl: 'https://example.com/image.jpg',
+            baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 30,
-            position: 'center'
+            logoSize: 12,
+            paddingX: 20,
+            paddingY: 10,
+            position: 'bottom-right'
           }
         },
         {
-          description: 'No logo placement',
+          description: 'Large centered logo',
           body: {
-            baseImageUrl: 'https://example.com/image.jpg',
-            position: 'none'
+            baseImageUrl: 'https://example.com/bg.jpg',
+            logoImageUrl: 'https://example.com/logo.png',
+            logoSize: 40,
+            paddingX: 0,
+            paddingY: 0,
+            position: 'center'
           }
         }
       ]
