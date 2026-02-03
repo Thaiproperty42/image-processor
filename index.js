@@ -82,9 +82,10 @@ app.post('/combine', async (req, res) => {
     const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // Convert padding to numbers (can be 0)
-    const padX = Number(paddingX);
-    const padY = Number(paddingY);
+    // ✅ SMART PADDING: Always enforce minimum safe distance from edges
+    const MIN_PADDING = 25; // Minimum 25px from any edge
+    const padX = Math.max(Number(paddingX), MIN_PADDING);
+    const padY = Math.max(Number(paddingY), MIN_PADDING);
     
     console.log('Calculated:', {
       baseWidth: baseImg.width,
@@ -92,21 +93,19 @@ app.post('/combine', async (req, res) => {
       logoW,
       logoH,
       padX,
-      padY
+      padY,
+      appliedMinPadding: MIN_PADDING
     });
     
     // Position calculation
     // paddingX and paddingY are OFFSETS from the corner
-    // 0,0 = exactly at corner
-    // positive values = move INWARD from edge
+    // Minimum padding ensures logo never touches edges
     
     let x, y;
     
     if (pos.includes('top')) {
-      // Top edge: y = 0 + offset
       y = padY;
     } else if (pos.includes('bottom')) {
-      // Bottom edge: start from bottom, move UP by logo height, then apply offset INWARD
       y = baseImg.height - logoH - padY;
     } else if (pos.includes('center') || pos.includes('middle')) {
       y = (baseImg.height - logoH) / 2 + padY;
@@ -116,10 +115,8 @@ app.post('/combine', async (req, res) => {
     }
     
     if (pos.includes('left')) {
-      // Left edge: x = 0 + offset
       x = padX;
     } else if (pos.includes('right')) {
-      // Right edge: start from right, move LEFT by logo width, then apply offset INWARD
       x = baseImg.width - logoW - padX;
     } else if (pos.includes('center') || pos.includes('middle')) {
       x = (baseImg.width - logoW) / 2 + padX;
@@ -140,8 +137,11 @@ app.post('/combine', async (req, res) => {
       image: final,
       debug: {
         logoSize: Number(logoSize),
-        padX,
-        padY,
+        requestedPaddingX: Number(paddingX),
+        requestedPaddingY: Number(paddingY),
+        appliedPaddingX: padX,
+        appliedPaddingY: padY,
+        minPaddingEnforced: MIN_PADDING,
         position: pos,
         finalX: Math.round(x),
         finalY: Math.round(y),
@@ -158,7 +158,14 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
-    version: '2.0.0',
+    version: '3.0.0 (Smart Padding Edition)',
+    features: [
+      '✅ Automatic 25px minimum padding from all edges',
+      '✅ Base64 and URL support for both images',
+      '✅ Flexible positioning (9 positions + none)',
+      '✅ Logo size as percentage of base width',
+      '✅ Prevents logo cutoff at borders'
+    ],
     usage: {
       endpoint: '/combine',
       method: 'POST',
@@ -168,15 +175,18 @@ app.get('/', (req, res) => {
         logoImage: 'base64 string OR',
         logoImageUrl: 'URL string',
         logoSize: 'number (% of base width, default: 10)',
-        paddingX: 'number (pixels from edge, 0 = corner, default: 0)',
-        paddingY: 'number (pixels from edge, 0 = corner, default: 0)',
+        paddingX: 'number (pixels from edge, min: 25, default: 25)',
+        paddingY: 'number (pixels from edge, min: 25, default: 25)',
         position: 'string (default: bottom-right)'
       },
-      paddingLogic: {
-        'bottom-right': 'paddingX=0, paddingY=0 → logo sits exactly at bottom-right corner',
-        'bottom-right': 'paddingX=20, paddingY=10 → logo moves 20px left from right edge, 10px up from bottom',
-        'top-left': 'paddingX=0, paddingY=0 → logo sits exactly at top-left corner',
-        'top-left': 'paddingX=15, paddingY=15 → logo moves 15px inward from both edges'
+      smartPadding: {
+        description: 'Minimum 25px padding is ALWAYS enforced',
+        examples: {
+          'paddingX: 0': 'Auto-upgraded to 25px',
+          'paddingX: 10': 'Auto-upgraded to 25px',
+          'paddingX: 50': 'Used as-is (already > 25px)',
+          'paddingX: 100': 'Used as-is (already > 25px)'
+        }
       },
       positionOptions: [
         'top-left', 'top-right', 'top-center',
@@ -184,39 +194,62 @@ app.get('/', (req, res) => {
         'center-left', 'center-right', 'center',
         'none (no logo)'
       ],
+      recommendedSettings: {
+        smallWatermark: {
+          logoSize: 10,
+          paddingX: 30,
+          paddingY: 30,
+          position: 'bottom-right'
+        },
+        mediumBranding: {
+          logoSize: 18,
+          paddingX: 40,
+          paddingY: 40,
+          position: 'top-right'
+        },
+        largeCentered: {
+          logoSize: 35,
+          paddingX: 0,
+          paddingY: 0,
+          position: 'center'
+        }
+      },
       examples: [
         {
-          description: 'Logo at exact bottom-right corner',
+          description: 'Professional watermark (auto-padded)',
           body: {
-            baseImageUrl: 'https://example.com/bg.jpg',
+            baseImageUrl: 'https://example.com/villa.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 15,
+            logoSize: 12,
             paddingX: 0,
             paddingY: 0,
             position: 'bottom-right'
-          }
+          },
+          result: 'Logo will be 12% width, 25px from right edge, 25px from bottom'
         },
         {
-          description: 'Logo 20px from right, 10px from bottom',
+          description: 'Large top-right branding',
           body: {
-            baseImageUrl: 'https://example.com/bg.jpg',
+            baseImageUrl: 'https://example.com/property.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 12,
-            paddingX: 20,
-            paddingY: 10,
-            position: 'bottom-right'
-          }
+            logoSize: 20,
+            paddingX: 50,
+            paddingY: 40,
+            position: 'top-right'
+          },
+          result: 'Logo will be 20% width, 50px from right, 40px from top'
         },
         {
-          description: 'Large centered logo',
+          description: 'Centered overlay (no padding needed)',
           body: {
             baseImageUrl: 'https://example.com/bg.jpg',
-            logoImageUrl: 'https://example.com/logo.png',
+            logoImageUrl: 'https://example.com/brand.png',
             logoSize: 40,
             paddingX: 0,
             paddingY: 0,
             position: 'center'
-          }
+          },
+          result: 'Logo centered, 25px safety margin auto-applied'
         }
       ]
     }
@@ -224,4 +257,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Image Combiner API v3.0 running on port ${PORT}`));
