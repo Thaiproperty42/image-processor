@@ -13,7 +13,7 @@ function downloadImage(url) {
     client.get(url, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('end', () => resolve(Buffer.concat(chunks));
       res.on('error', reject);
     }).on('error', reject);
   });
@@ -44,6 +44,17 @@ app.post('/combine', async (req, res) => {
       return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
+    // Check if position is 'none' - if so, skip logo processing
+    const pos = position.toLowerCase().trim();
+    if (pos === 'none') {
+      const baseImg = await loadImage(baseBuffer);
+      const canvas = createCanvas(baseImg.width, baseImg.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(baseImg, 0, 0);
+      const final = canvas.toBuffer('image/png').toString('base64');
+      return res.json({ success: true, image: final });
+    }
+    
     if (logoImage) {
       logoBuffer = Buffer.from(logoImage, 'base64');
     } else if (logoImageUrl) {
@@ -71,7 +82,6 @@ app.post('/combine', async (req, res) => {
     
     // Parse position
     let x, y;
-    const pos = position.toLowerCase().trim();
     
     // Vertical positioning
     if (pos.includes('top')) {
@@ -130,7 +140,7 @@ app.get('/', (req, res) => {
         'top-left', 'top-right', 'top-center', 'top',
         'bottom-left', 'bottom-right', 'bottom-center', 'bottom',
         'center-left', 'center-right', 'center', 'middle',
-        'left', 'right'
+        'left', 'right', 'none'
       ],
       examples: [
         {
@@ -151,6 +161,13 @@ app.get('/', (req, res) => {
             logoImageUrl: 'https://example.com/logo.png',
             logoSize: 30,
             position: 'center'
+          }
+        },
+        {
+          description: 'No logo placement',
+          body: {
+            baseImageUrl: 'https://example.com/image.jpg',
+            position: 'none'
           }
         }
       ]
