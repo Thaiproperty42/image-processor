@@ -27,15 +27,13 @@ app.post('/combine', async (req, res) => {
       baseImageUrl, 
       logoImageUrl, 
       logoSize = 10, 
-      paddingX = 0,
-      paddingY = 0,
+      padding = 30,  // ✅ SINGLE PADDING VALUE FOR ALL SIDES
       position = 'bottom-right'
     } = req.body;
     
     console.log('📥 Received params:', {
       logoSize,
-      paddingX,
-      paddingY,
+      padding,
       position,
       positionType: typeof position
     });
@@ -93,57 +91,56 @@ app.post('/combine', async (req, res) => {
     const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // NO MIN PADDING - Use values directly as provided
-    const padX = Number(paddingX);
-    const padY = Number(paddingY);
+    // ✅ USE SAME PADDING FOR ALL SIDES
+    const pad = Number(padding);
     
     console.log('📐 Calculated dimensions:', {
       baseWidth: baseImg.width,
       baseHeight: baseImg.height,
       logoW: Math.round(logoW),
       logoH: Math.round(logoH),
-      padX,
-      padY
+      padding: pad
     });
     
-    // Position calculation with debug logging
+    // Position calculation - EQUAL PADDING ON ALL SIDES
     let x, y;
     
-    // Calculate Y position (vertical)
+    // Calculate Y position (vertical) - ALWAYS USE PADDING
     if (pos.includes('top')) {
-      y = padY;
-      console.log('✅ Y = TOP:', y);
+      y = pad;  // ✅ PADDING FROM TOP
+      console.log('✅ Y = TOP with padding:', y);
     } else if (pos.includes('bottom')) {
-      y = baseImg.height - logoH - padY;
-      console.log('✅ Y = BOTTOM:', y);
+      y = baseImg.height - logoH - pad;  // ✅ PADDING FROM BOTTOM
+      console.log('✅ Y = BOTTOM with padding:', y);
     } else if (pos.includes('center') || pos.includes('middle')) {
-      y = (baseImg.height - logoH) / 2 + padY;
+      y = (baseImg.height - logoH) / 2;  // ✅ CENTER (no padding adjustment)
       console.log('✅ Y = CENTER:', y);
     } else {
-      // Default to TOP if nothing matches
-      y = padY;
-      console.log('⚠️ Y = DEFAULT (TOP):', y);
+      // Default to BOTTOM with padding
+      y = baseImg.height - logoH - pad;
+      console.log('⚠️ Y = DEFAULT (BOTTOM) with padding:', y);
     }
     
-    // Calculate X position (horizontal)
+    // Calculate X position (horizontal) - ALWAYS USE PADDING
     if (pos.includes('left')) {
-      x = padX;
-      console.log('✅ X = LEFT:', x);
+      x = pad;  // ✅ PADDING FROM LEFT
+      console.log('✅ X = LEFT with padding:', x);
     } else if (pos.includes('right')) {
-      x = baseImg.width - logoW - padX;
-      console.log('✅ X = RIGHT:', x);
+      x = baseImg.width - logoW - pad;  // ✅ PADDING FROM RIGHT
+      console.log('✅ X = RIGHT with padding:', x);
     } else if (pos.includes('center') || pos.includes('middle')) {
-      x = (baseImg.width - logoW) / 2 + padX;
+      x = (baseImg.width - logoW) / 2;  // ✅ CENTER (no padding adjustment)
       console.log('✅ X = CENTER:', x);
     } else {
-      // Default to RIGHT if nothing matches
-      x = baseImg.width - logoW - padX;
-      console.log('⚠️ X = DEFAULT (RIGHT):', x);
+      // Default to RIGHT with padding
+      x = baseImg.width - logoW - pad;
+      console.log('⚠️ X = DEFAULT (RIGHT) with padding:', x);
     }
     
     console.log('🎯 Final position calculated:', { 
       x: Math.round(x), 
       y: Math.round(y),
+      padding: pad,
       willDrawAt: `(${Math.round(x)}, ${Math.round(y)})`,
       logoSize: `${Math.round(logoW)}x${Math.round(logoH)}`
     });
@@ -158,8 +155,7 @@ app.post('/combine', async (req, res) => {
       image: final,
       debug: {
         logoSize: Number(logoSize),
-        paddingX: padX,
-        paddingY: padY,
+        padding: pad,
         position: pos,
         finalX: Math.round(x),
         finalY: Math.round(y),
@@ -177,14 +173,13 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
-    version: '4.1.0 (No Min Padding + Debug)',
+    version: '5.0.0 (Equal Padding All Sides)',
     features: [
       '✅ Base64 and URL support for both images',
       '✅ Flexible positioning (9 positions + none)',
       '✅ Logo size as percentage of base width',
-      '✅ Full padding control - no restrictions',
-      '✅ Detailed debug logging',
-      '⚠️ Warning: Logo may be cut off with paddingX/Y = 0 or negative values'
+      '✅ EQUAL padding on all sides (mandatory)',
+      '✅ Detailed debug logging'
     ],
     usage: {
       endpoint: '/combine',
@@ -195,17 +190,8 @@ app.get('/', (req, res) => {
         logoImage: 'base64 string OR',
         logoImageUrl: 'URL string',
         logoSize: 'number (% of base width, default: 10)',
-        paddingX: 'number (pixels from edge, can be 0 or negative, default: 0)',
-        paddingY: 'number (pixels from edge, can be 0 or negative, default: 0)',
+        padding: 'number (pixels from ALL edges, default: 30)',
         position: 'string (default: bottom-right)'
-      },
-      paddingBehavior: {
-        description: 'Padding values are used exactly as provided - NO minimum enforced',
-        examples: {
-          'paddingX: 0, paddingY: 0': 'Logo sits exactly at corner (may be cut off)',
-          'paddingX: -10, paddingY: -10': 'Logo moves 10px outside frame (will be cut off)',
-          'paddingX: 30, paddingY: 30': 'Logo has 30px breathing room from edges'
-        }
       },
       positionOptions: [
         'top-left', 'top-right', 'top-center',
@@ -215,25 +201,23 @@ app.get('/', (req, res) => {
       ],
       examples: [
         {
-          description: 'Logo at top-right corner with no padding',
+          description: 'Logo at top-right with 30px padding on all sides',
           body: {
             baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 70,
-            paddingX: 0,
-            paddingY: 0,
+            logoSize: 15,
+            padding: 30,
             position: 'top-right'
           }
         },
         {
-          description: 'Logo with safe padding at top-right',
+          description: 'Logo at bottom-left with 50px padding on all sides',
           body: {
             baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 70,
-            paddingX: 30,
-            paddingY: 10,
-            position: 'top-right'
+            logoSize: 12,
+            padding: 50,
+            position: 'bottom-left'
           }
         }
       ]
@@ -242,4 +226,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Image Combiner API v4.1 (Debug Mode) running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Image Combiner API v5.0 (Equal Padding) running on port ${PORT}`));
