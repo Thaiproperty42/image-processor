@@ -33,6 +33,17 @@ app.post('/combine', async (req, res) => {
       position = 'bottom-right'
     } = req.body;
     
+    // DEBUG: Log incoming values
+    console.log('Received params:', {
+      logoSize,
+      padding,
+      paddingX,
+      paddingY,
+      position,
+      paddingXType: typeof paddingX,
+      paddingYType: typeof paddingY
+    });
+    
     // Support both base64 and URLs
     let baseBuffer, logoBuffer;
     
@@ -76,9 +87,19 @@ app.post('/combine', async (req, res) => {
     const logoW = baseImg.width * (logoSize / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // Use separate padding for X and Y if provided, otherwise use padding
-    const padX = paddingX !== undefined ? paddingX : padding;
-    const padY = paddingY !== undefined ? paddingY : padding;
+    // Force numeric conversion and handle 0 explicitly
+    const padX = paddingX !== undefined && paddingX !== null ? Number(paddingX) : padding;
+    const padY = paddingY !== undefined && paddingY !== null ? Number(paddingY) : padding;
+    
+    // DEBUG: Log calculated values
+    console.log('Calculated values:', {
+      baseWidth: baseImg.width,
+      baseHeight: baseImg.height,
+      logoW,
+      logoH,
+      padX,
+      padY
+    });
     
     // Parse position
     let x, y;
@@ -107,13 +128,28 @@ app.post('/combine', async (req, res) => {
       x = baseImg.width - logoW - padX;
     }
     
+    // DEBUG: Log final position
+    console.log('Final position:', { x, y, position: pos });
+    
     // Draw logo
     ctx.drawImage(logoImg, x, y, logoW, logoH);
     
     const final = canvas.toBuffer('image/png').toString('base64');
     
-    res.json({ success: true, image: final });
+    res.json({ 
+      success: true, 
+      image: final,
+      debug: {
+        logoSize,
+        padX,
+        padY,
+        position: pos,
+        finalX: x,
+        finalY: y
+      }
+    });
   } catch (error) {
+    console.error('Error:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
@@ -121,7 +157,7 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
-    version: '1.0.0',
+    version: '1.0.1',
     usage: {
       endpoint: '/combine',
       method: 'POST',
@@ -132,8 +168,8 @@ app.get('/', (req, res) => {
         logoImageUrl: 'URL string (alternative to logoImage)',
         logoSize: 'number (percentage of base image width, default: 10)',
         padding: 'number (pixels from edge, default: 40)',
-        paddingX: 'number (horizontal padding, overrides padding)',
-        paddingY: 'number (vertical padding, overrides padding)',
+        paddingX: 'number (horizontal padding, overrides padding, can be 0)',
+        paddingY: 'number (vertical padding, overrides padding, can be 0)',
         position: 'string (default: bottom-right)'
       },
       positionOptions: [
@@ -144,7 +180,18 @@ app.get('/', (req, res) => {
       ],
       examples: [
         {
-          description: 'Logo at top-right, very close to edge',
+          description: 'Logo at bottom-right with no padding (at edge)',
+          body: {
+            baseImageUrl: 'https://example.com/image.jpg',
+            logoImageUrl: 'https://example.com/logo.png',
+            logoSize: 60,
+            paddingX: 0,
+            paddingY: 0,
+            position: 'bottom-right'
+          }
+        },
+        {
+          description: 'Logo at top-right with padding',
           body: {
             baseImage: 'base64...',
             logoImage: 'base64...',
