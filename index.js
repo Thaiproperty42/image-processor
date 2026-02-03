@@ -31,15 +31,7 @@ app.post('/combine', async (req, res) => {
       position = 'bottom-right'
     } = req.body;
     
-    console.log('📥 RAW INPUT:', {
-      logoSize,
-      offsetX,
-      offsetY,
-      position,
-      positionType: typeof position,
-      positionLength: position ? position.length : 0,
-      positionBytes: position ? Buffer.from(position).toString('hex') : 'null'
-    });
+    console.log('📥 INPUT:', { logoSize, offsetX, offsetY, position });
     
     let baseBuffer, logoBuffer;
     
@@ -51,18 +43,13 @@ app.post('/combine', async (req, res) => {
       return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
-    // Clean position string AGGRESSIVELY
-    const pos = String(position || 'bottom-right')
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/[^a-z-]/g, '')
-      .trim();
+    const pos = String(position || 'bottom-right').toLowerCase().trim();
     
-    console.log('🔍 CLEANED POSITION:', {
-      original: position,
-      cleaned: pos,
+    console.log('🔍 Position string:', {
+      input: position,
+      processed: pos,
       length: pos.length,
-      bytes: Buffer.from(pos).toString('hex')
+      chars: pos.split('')
     });
     
     if (pos === 'none') {
@@ -94,87 +81,75 @@ app.post('/combine', async (req, res) => {
     const offX = Number(offsetX);
     const offY = Number(offsetY);
     
-    console.log('📐 Dimensions:', {
-      baseWidth: baseImg.width,
-      baseHeight: baseImg.height,
-      logoW: Math.round(logoW),
-      logoH: Math.round(logoH),
-      offsetX: offX,
-      offsetY: offY
+    console.log('📐 Sizes:', {
+      base: `${baseImg.width}x${baseImg.height}`,
+      logo: `${Math.round(logoW)}x${Math.round(logoH)}`,
+      offset: `${offX}, ${offY}`
     });
     
-    // ✅ POSITION CALCULATION - EXACT STRING MATCHING
+    // ✅ EXPLICIT POSITION MATCHING
     let x, y;
-    let verticalPos = 'unknown';
-    let horizontalPos = 'unknown';
     
-    // Detect VERTICAL position
-    if (pos.includes('top')) {
-      y = offY;
-      verticalPos = 'top';
-      console.log('✅ VERTICAL = TOP, y =', y);
-    } else if (pos.includes('bottom')) {
-      y = baseImg.height - logoH - offY;
-      verticalPos = 'bottom';
-      console.log('✅ VERTICAL = BOTTOM, y =', y);
-    } else if (pos.includes('center') || pos.includes('middle')) {
-      y = (baseImg.height - logoH) / 2;
-      verticalPos = 'center';
-      console.log('✅ VERTICAL = CENTER, y =', y);
-    } else {
-      y = baseImg.height - logoH - offY;
-      verticalPos = 'default-bottom';
-      console.log('⚠️ VERTICAL = DEFAULT BOTTOM, y =', y);
-    }
+    // Test each string method
+    const hasTop = pos.includes('top');
+    const hasBottom = pos.includes('bottom');
+    const hasLeft = pos.includes('left');
+    const hasRight = pos.includes('right');
+    const hasCenter = pos.includes('center') || pos.includes('middle');
     
-    // Detect HORIZONTAL position
-    if (pos.includes('right')) {
-      x = baseImg.width - logoW - offX;
-      horizontalPos = 'right';
-      console.log('✅ HORIZONTAL = RIGHT, x =', x);
-    } else if (pos.includes('left')) {
-      x = offX;
-      horizontalPos = 'left';
-      console.log('✅ HORIZONTAL = LEFT, x =', x);
-    } else if (pos.includes('center') || pos.includes('middle')) {
-      x = (baseImg.width - logoW) / 2;
-      horizontalPos = 'center';
-      console.log('✅ HORIZONTAL = CENTER, x =', x);
-    } else {
-      x = baseImg.width - logoW - offX;
-      horizontalPos = 'default-right';
-      console.log('⚠️ HORIZONTAL = DEFAULT RIGHT, x =', x);
-    }
-    
-    console.log('🎯 POSITION DETECTED:', {
-      vertical: verticalPos,
-      horizontal: horizontalPos,
-      combined: `${verticalPos}-${horizontalPos}`
+    console.log('🔍 Position tests:', {
+      hasTop,
+      hasBottom,
+      hasLeft,
+      hasRight,
+      hasCenter
     });
     
-    // Calculate logo center and distances
+    // Y calculation
+    if (hasTop) {
+      y = offY;
+      console.log('✅ Y = TOP:', y);
+    } else if (hasBottom) {
+      y = baseImg.height - logoH - offY;
+      console.log('✅ Y = BOTTOM:', y);
+    } else if (hasCenter) {
+      y = (baseImg.height - logoH) / 2;
+      console.log('✅ Y = CENTER:', y);
+    } else {
+      y = baseImg.height - logoH - offY;
+      console.log('⚠️ Y = DEFAULT (BOTTOM):', y);
+    }
+    
+    // X calculation
+    if (hasRight) {
+      x = baseImg.width - logoW - offX;
+      console.log('✅ X = RIGHT:', x);
+    } else if (hasLeft) {
+      x = offX;
+      console.log('✅ X = LEFT:', x);
+    } else if (hasCenter) {
+      x = (baseImg.width - logoW) / 2;
+      console.log('✅ X = CENTER:', x);
+    } else {
+      x = baseImg.width - logoW - offX;
+      console.log('⚠️ X = DEFAULT (RIGHT):', x);
+    }
+    
+    console.log('🎯 CALCULATED POSITION:', { x: Math.round(x), y: Math.round(y) });
+    
+    // Verification calculation
+    const expectedRightX = baseImg.width - logoW - offX;
+    const expectedLeftX = offX;
+    console.log('🔢 Expected values:', {
+      ifRight: Math.round(expectedRightX),
+      ifLeft: Math.round(expectedLeftX),
+      actualX: Math.round(x),
+      matches: x === expectedRightX ? 'RIGHT' : (x === expectedLeftX ? 'LEFT' : 'NEITHER')
+    });
+    
     const logoCenterX = x + (logoW / 2);
     const logoCenterY = y + (logoH / 2);
     
-    const distFromTop = logoCenterY;
-    const distFromBottom = baseImg.height - logoCenterY;
-    const distFromLeft = logoCenterX;
-    const distFromRight = baseImg.width - logoCenterX;
-    
-    console.log('📏 Logo center distances:', {
-      centerPoint: `(${Math.round(logoCenterX)}, ${Math.round(logoCenterY)})`,
-      toTop: Math.round(distFromTop),
-      toBottom: Math.round(distFromBottom),
-      toLeft: Math.round(distFromLeft),
-      toRight: Math.round(distFromRight)
-    });
-    
-    console.log('🎯 FINAL DRAWING POSITION:', {
-      x: Math.round(x),
-      y: Math.round(y)
-    });
-    
-    // Draw logo
     ctx.drawImage(logoImg, x, y, logoW, logoH);
     
     const final = canvas.toBuffer('image/png').toString('base64');
@@ -183,40 +158,29 @@ app.post('/combine', async (req, res) => {
       success: true, 
       image: final,
       debug: {
-        positionInput: position,
-        positionCleaned: pos,
-        positionDetected: `${verticalPos}-${horizontalPos}`,
-        logoTopLeftCorner: {
-          x: Math.round(x),
-          y: Math.round(y)
-        },
-        logoCenter: {
-          x: Math.round(logoCenterX),
-          y: Math.round(logoCenterY)
-        },
-        distanceFromCenterToEdges: {
-          top: Math.round(distFromTop),
-          bottom: Math.round(distFromBottom),
-          left: Math.round(distFromLeft),
-          right: Math.round(distFromRight)
+        position: pos,
+        detectedFlags: { hasTop, hasBottom, hasLeft, hasRight, hasCenter },
+        logoCorner: { x: Math.round(x), y: Math.round(y) },
+        logoCenter: { x: Math.round(logoCenterX), y: Math.round(logoCenterY) },
+        distanceFromCenter: {
+          top: Math.round(logoCenterY),
+          bottom: Math.round(baseImg.height - logoCenterY),
+          left: Math.round(logoCenterX),
+          right: Math.round(baseImg.width - logoCenterX)
         },
         logoSize: `${Math.round(logoW)}x${Math.round(logoH)}`,
-        offsetX: offX,
-        offsetY: offY
+        offsets: { x: offX, y: offY }
       }
     });
   } catch (error) {
     console.error('❌ ERROR:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.get('/', (req, res) => {
-  res.json({ 
-    status: 'Image Combiner API v7.1 - Debug Mode',
-    endpoint: '/combine'
-  });
+  res.json({ status: 'API v7.2 - Nuclear Debug' });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Debug API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Running on port ${PORT}`));
