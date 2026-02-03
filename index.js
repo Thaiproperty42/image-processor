@@ -45,13 +45,6 @@ app.post('/combine', async (req, res) => {
     
     const pos = String(position || 'bottom-right').toLowerCase().trim();
     
-    console.log('🔍 Position string:', {
-      input: position,
-      processed: pos,
-      length: pos.length,
-      chars: pos.split('')
-    });
-    
     if (pos === 'none') {
       const baseImg = await loadImage(baseBuffer);
       const canvas = createCanvas(baseImg.width, baseImg.height);
@@ -87,65 +80,46 @@ app.post('/combine', async (req, res) => {
       offset: `${offX}, ${offY}`
     });
     
-    // ✅ EXPLICIT POSITION MATCHING
+    // ✅ POSITION LOGIC - NO LIMITS, CAN GO OUTSIDE FRAME
     let x, y;
     
-    // Test each string method
     const hasTop = pos.includes('top');
     const hasBottom = pos.includes('bottom');
     const hasLeft = pos.includes('left');
     const hasRight = pos.includes('right');
     const hasCenter = pos.includes('center') || pos.includes('middle');
     
-    console.log('🔍 Position tests:', {
-      hasTop,
-      hasBottom,
-      hasLeft,
-      hasRight,
-      hasCenter
-    });
-    
-    // Y calculation
+    // Y calculation - offsetY is SUBTRACTED from edge distance
     if (hasTop) {
-      y = offY;
-      console.log('✅ Y = TOP:', y);
+      y = 0 - offY;  // ✅ offsetY > 0 moves logo UP (can go negative)
+      console.log('✅ Y = TOP - offset:', y);
     } else if (hasBottom) {
-      y = baseImg.height - logoH - offY;
-      console.log('✅ Y = BOTTOM:', y);
+      y = baseImg.height - logoH + offY;  // ✅ offsetY > 0 moves logo DOWN (can go past bottom)
+      console.log('✅ Y = BOTTOM + offset:', y);
     } else if (hasCenter) {
       y = (baseImg.height - logoH) / 2;
       console.log('✅ Y = CENTER:', y);
     } else {
-      y = baseImg.height - logoH - offY;
+      y = baseImg.height - logoH + offY;
       console.log('⚠️ Y = DEFAULT (BOTTOM):', y);
     }
     
-    // X calculation
+    // X calculation - offsetX is SUBTRACTED from edge distance
     if (hasRight) {
-      x = baseImg.width - logoW - offX;
-      console.log('✅ X = RIGHT:', x);
+      x = baseImg.width - logoW + offX;  // ✅ offsetX > 0 moves logo RIGHT (can go past edge)
+      console.log('✅ X = RIGHT + offset:', x);
     } else if (hasLeft) {
-      x = offX;
-      console.log('✅ X = LEFT:', x);
+      x = 0 - offX;  // ✅ offsetX > 0 moves logo LEFT (can go negative)
+      console.log('✅ X = LEFT - offset:', x);
     } else if (hasCenter) {
       x = (baseImg.width - logoW) / 2;
       console.log('✅ X = CENTER:', x);
     } else {
-      x = baseImg.width - logoW - offX;
+      x = baseImg.width - logoW + offX;
       console.log('⚠️ X = DEFAULT (RIGHT):', x);
     }
     
-    console.log('🎯 CALCULATED POSITION:', { x: Math.round(x), y: Math.round(y) });
-    
-    // Verification calculation
-    const expectedRightX = baseImg.width - logoW - offX;
-    const expectedLeftX = offX;
-    console.log('🔢 Expected values:', {
-      ifRight: Math.round(expectedRightX),
-      ifLeft: Math.round(expectedLeftX),
-      actualX: Math.round(x),
-      matches: x === expectedRightX ? 'RIGHT' : (x === expectedLeftX ? 'LEFT' : 'NEITHER')
-    });
+    console.log('🎯 FINAL POSITION:', { x: Math.round(x), y: Math.round(y) });
     
     const logoCenterX = x + (logoW / 2);
     const logoCenterY = y + (logoH / 2);
@@ -159,7 +133,6 @@ app.post('/combine', async (req, res) => {
       image: final,
       debug: {
         position: pos,
-        detectedFlags: { hasTop, hasBottom, hasLeft, hasRight, hasCenter },
         logoCorner: { x: Math.round(x), y: Math.round(y) },
         logoCenter: { x: Math.round(logoCenterX), y: Math.round(logoCenterY) },
         distanceFromCenter: {
@@ -179,8 +152,19 @@ app.post('/combine', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'API v7.2 - Nuclear Debug' });
+  res.json({ 
+    status: 'API v8.0 - Zero Limits',
+    usage: {
+      offsetX: 'Positive values move logo AWAY from edge (can go outside)',
+      offsetY: 'Positive values move logo AWAY from edge (can go outside)',
+      examples: {
+        'offsetX: 0, offsetY: 0': 'Logo touches edge',
+        'offsetX: -50, offsetY: -50': 'Logo overlaps edge by 50px',
+        'offsetX: 100, offsetY: 100': 'Logo 100px inside from edge'
+      }
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Zero Limits API on port ${PORT}`));
