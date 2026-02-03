@@ -26,12 +26,20 @@ app.post('/combine', async (req, res) => {
       baseImageUrl, 
       logoImageUrl, 
       logoSize = 10, 
-      offsetX = 0,  // ✅ MANUAL X OFFSET FROM EDGE
-      offsetY = 0,  // ✅ MANUAL Y OFFSET FROM EDGE
-      position = 'top-right'
+      offsetX = 0,
+      offsetY = 0,
+      position = 'bottom-right'
     } = req.body;
     
-    console.log('📥 Received:', { logoSize, offsetX, offsetY, position });
+    console.log('📥 RAW INPUT:', {
+      logoSize,
+      offsetX,
+      offsetY,
+      position,
+      positionType: typeof position,
+      positionLength: position ? position.length : 0,
+      positionBytes: position ? Buffer.from(position).toString('hex') : 'null'
+    });
     
     let baseBuffer, logoBuffer;
     
@@ -43,7 +51,19 @@ app.post('/combine', async (req, res) => {
       return res.status(400).json({ error: 'Missing baseImage or baseImageUrl' });
     }
     
-    const pos = String(position).toLowerCase().replace(/\s+/g, '').trim();
+    // Clean position string AGGRESSIVELY
+    const pos = String(position || 'bottom-right')
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[^a-z-]/g, '')
+      .trim();
+    
+    console.log('🔍 CLEANED POSITION:', {
+      original: position,
+      cleaned: pos,
+      length: pos.length,
+      bytes: Buffer.from(pos).toString('hex')
+    });
     
     if (pos === 'none') {
       const baseImg = await loadImage(baseBuffer);
@@ -69,70 +89,90 @@ app.post('/combine', async (req, res) => {
     
     ctx.drawImage(baseImg, 0, 0);
     
-    // Calculate logo dimensions
     const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
-    
     const offX = Number(offsetX);
     const offY = Number(offsetY);
     
     console.log('📐 Dimensions:', {
-      base: `${baseImg.width}x${baseImg.height}`,
-      logo: `${Math.round(logoW)}x${Math.round(logoH)}`,
+      baseWidth: baseImg.width,
+      baseHeight: baseImg.height,
+      logoW: Math.round(logoW),
+      logoH: Math.round(logoH),
       offsetX: offX,
       offsetY: offY
     });
     
-    // ✅ SIMPLE POSITION CALCULATION
+    // ✅ POSITION CALCULATION - EXACT STRING MATCHING
     let x, y;
+    let verticalPos = 'unknown';
+    let horizontalPos = 'unknown';
     
-    // Y position (vertical) - DISTANCE FROM EDGE
-    if (pos.indexOf('top') >= 0) {
-      y = offY;  // Distance from TOP edge
-      console.log('✅ TOP: y = offsetY =', y);
-    } else if (pos.indexOf('bottom') >= 0) {
-      y = baseImg.height - logoH - offY;  // Distance from BOTTOM edge
-      console.log('✅ BOTTOM: y = height - logoH - offsetY =', y);
-    } else {
+    // Detect VERTICAL position
+    if (pos.includes('top')) {
+      y = offY;
+      verticalPos = 'top';
+      console.log('✅ VERTICAL = TOP, y =', y);
+    } else if (pos.includes('bottom')) {
+      y = baseImg.height - logoH - offY;
+      verticalPos = 'bottom';
+      console.log('✅ VERTICAL = BOTTOM, y =', y);
+    } else if (pos.includes('center') || pos.includes('middle')) {
       y = (baseImg.height - logoH) / 2;
-      console.log('✅ CENTER: y =', y);
-    }
-    
-    // X position (horizontal) - DISTANCE FROM EDGE
-    if (pos.indexOf('right') >= 0) {
-      x = baseImg.width - logoW - offX;  // Distance from RIGHT edge
-      console.log('✅ RIGHT: x = width - logoW - offsetX =', x);
-    } else if (pos.indexOf('left') >= 0) {
-      x = offX;  // Distance from LEFT edge
-      console.log('✅ LEFT: x = offsetX =', x);
+      verticalPos = 'center';
+      console.log('✅ VERTICAL = CENTER, y =', y);
     } else {
-      x = (baseImg.width - logoW) / 2;
-      console.log('✅ CENTER: x =', x);
+      y = baseImg.height - logoH - offY;
+      verticalPos = 'default-bottom';
+      console.log('⚠️ VERTICAL = DEFAULT BOTTOM, y =', y);
     }
     
-    // Calculate logo center point
+    // Detect HORIZONTAL position
+    if (pos.includes('right')) {
+      x = baseImg.width - logoW - offX;
+      horizontalPos = 'right';
+      console.log('✅ HORIZONTAL = RIGHT, x =', x);
+    } else if (pos.includes('left')) {
+      x = offX;
+      horizontalPos = 'left';
+      console.log('✅ HORIZONTAL = LEFT, x =', x);
+    } else if (pos.includes('center') || pos.includes('middle')) {
+      x = (baseImg.width - logoW) / 2;
+      horizontalPos = 'center';
+      console.log('✅ HORIZONTAL = CENTER, x =', x);
+    } else {
+      x = baseImg.width - logoW - offX;
+      horizontalPos = 'default-right';
+      console.log('⚠️ HORIZONTAL = DEFAULT RIGHT, x =', x);
+    }
+    
+    console.log('🎯 POSITION DETECTED:', {
+      vertical: verticalPos,
+      horizontal: horizontalPos,
+      combined: `${verticalPos}-${horizontalPos}`
+    });
+    
+    // Calculate logo center and distances
     const logoCenterX = x + (logoW / 2);
     const logoCenterY = y + (logoH / 2);
     
-    // Calculate distances from logo center to edges
     const distFromTop = logoCenterY;
     const distFromBottom = baseImg.height - logoCenterY;
     const distFromLeft = logoCenterX;
     const distFromRight = baseImg.width - logoCenterX;
     
-    console.log('🎯 Logo center:', {
-      x: Math.round(logoCenterX),
-      y: Math.round(logoCenterY)
+    console.log('📏 Logo center distances:', {
+      centerPoint: `(${Math.round(logoCenterX)}, ${Math.round(logoCenterY)})`,
+      toTop: Math.round(distFromTop),
+      toBottom: Math.round(distFromBottom),
+      toLeft: Math.round(distFromLeft),
+      toRight: Math.round(distFromRight)
     });
     
-    console.log('📏 Distance from logo center to edges:', {
-      top: Math.round(distFromTop),
-      bottom: Math.round(distFromBottom),
-      left: Math.round(distFromLeft),
-      right: Math.round(distFromRight)
+    console.log('🎯 FINAL DRAWING POSITION:', {
+      x: Math.round(x),
+      y: Math.round(y)
     });
-    
-    console.log('🎯 Final position:', { x: Math.round(x), y: Math.round(y) });
     
     // Draw logo
     ctx.drawImage(logoImg, x, y, logoW, logoH);
@@ -143,7 +183,9 @@ app.post('/combine', async (req, res) => {
       success: true, 
       image: final,
       debug: {
-        position: pos,
+        positionInput: position,
+        positionCleaned: pos,
+        positionDetected: `${verticalPos}-${horizontalPos}`,
         logoTopLeftCorner: {
           x: Math.round(x),
           y: Math.round(y)
@@ -164,38 +206,17 @@ app.post('/combine', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ ERROR:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 
 app.get('/', (req, res) => {
   res.json({ 
-    status: 'Image Combiner API v7.0 - Manual Offset Control',
-    features: [
-      '✅ offsetX = distance from LEFT/RIGHT edge (pixels)',
-      '✅ offsetY = distance from TOP/BOTTOM edge (pixels)',
-      '✅ Returns logo center point coordinates',
-      '✅ Returns distances from logo center to all edges',
-      '⚠️ Logo can go outside frame - you have full control'
-    ],
-    usage: {
-      endpoint: '/combine',
-      parameters: {
-        logoSize: 'number (% of base width, default: 10)',
-        offsetX: 'number (pixels from horizontal edge, default: 0)',
-        offsetY: 'number (pixels from vertical edge, default: 0)',
-        position: 'string (determines which edges offsetX/offsetY measure from)'
-      },
-      examples: {
-        'top-right': 'offsetX = distance from RIGHT, offsetY = distance from TOP',
-        'top-left': 'offsetX = distance from LEFT, offsetY = distance from TOP',
-        'bottom-right': 'offsetX = distance from RIGHT, offsetY = distance from BOTTOM',
-        'bottom-left': 'offsetX = distance from LEFT, offsetY = distance from BOTTOM'
-      }
-    }
+    status: 'Image Combiner API v7.1 - Debug Mode',
+    endpoint: '/combine'
   });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Manual Offset API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Debug API running on port ${PORT}`));
