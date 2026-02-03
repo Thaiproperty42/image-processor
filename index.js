@@ -77,11 +77,13 @@ app.post('/combine', async (req, res) => {
     console.log('📐 Sizes:', {
       base: `${baseImg.width}x${baseImg.height}`,
       logo: `${Math.round(logoW)}x${Math.round(logoH)}`,
+      logoCenter: `${Math.round(logoW/2)}x${Math.round(logoH/2)}`,
       offset: `${offX}, ${offY}`
     });
     
-    // ✅ POSITION LOGIC - NO LIMITS, CAN GO OUTSIDE FRAME
+    // ✅ NEW LOGIC: offsetX/offsetY = distance from LOGO CENTER to edge
     let x, y;
+    let logoCenterX, logoCenterY;
     
     const hasTop = pos.includes('top');
     const hasBottom = pos.includes('bottom');
@@ -89,40 +91,54 @@ app.post('/combine', async (req, res) => {
     const hasRight = pos.includes('right');
     const hasCenter = pos.includes('center') || pos.includes('middle');
     
-    // Y calculation - offsetY is SUBTRACTED from edge distance
+    // Calculate LOGO CENTER position first, then derive corner position
+    
+    // Y calculation - offsetY is distance from logo CENTER to top/bottom edge
     if (hasTop) {
-      y = 0 - offY;  // ✅ offsetY > 0 moves logo UP (can go negative)
-      console.log('✅ Y = TOP - offset:', y);
+      logoCenterY = offY;  // Logo center is offsetY pixels from TOP
+      y = logoCenterY - (logoH / 2);  // Calculate top-left corner
+      console.log('✅ TOP: centerY =', offY, '→ cornerY =', Math.round(y));
     } else if (hasBottom) {
-      y = baseImg.height - logoH + offY;  // ✅ offsetY > 0 moves logo DOWN (can go past bottom)
-      console.log('✅ Y = BOTTOM + offset:', y);
+      logoCenterY = baseImg.height - offY;  // Logo center is offsetY pixels from BOTTOM
+      y = logoCenterY - (logoH / 2);
+      console.log('✅ BOTTOM: centerY =', Math.round(logoCenterY), '→ cornerY =', Math.round(y));
     } else if (hasCenter) {
-      y = (baseImg.height - logoH) / 2;
-      console.log('✅ Y = CENTER:', y);
+      logoCenterY = baseImg.height / 2;
+      y = logoCenterY - (logoH / 2);
+      console.log('✅ CENTER: centerY =', Math.round(logoCenterY), '→ cornerY =', Math.round(y));
     } else {
-      y = baseImg.height - logoH + offY;
-      console.log('⚠️ Y = DEFAULT (BOTTOM):', y);
+      logoCenterY = baseImg.height - offY;
+      y = logoCenterY - (logoH / 2);
+      console.log('⚠️ DEFAULT BOTTOM: centerY =', Math.round(logoCenterY), '→ cornerY =', Math.round(y));
     }
     
-    // X calculation - offsetX is SUBTRACTED from edge distance
+    // X calculation - offsetX is distance from logo CENTER to left/right edge
     if (hasRight) {
-      x = baseImg.width - logoW + offX;  // ✅ offsetX > 0 moves logo RIGHT (can go past edge)
-      console.log('✅ X = RIGHT + offset:', x);
+      logoCenterX = baseImg.width - offX;  // Logo center is offsetX pixels from RIGHT
+      x = logoCenterX - (logoW / 2);  // Calculate top-left corner
+      console.log('✅ RIGHT: centerX =', Math.round(logoCenterX), '→ cornerX =', Math.round(x));
     } else if (hasLeft) {
-      x = 0 - offX;  // ✅ offsetX > 0 moves logo LEFT (can go negative)
-      console.log('✅ X = LEFT - offset:', x);
+      logoCenterX = offX;  // Logo center is offsetX pixels from LEFT
+      x = logoCenterX - (logoW / 2);
+      console.log('✅ LEFT: centerX =', offX, '→ cornerX =', Math.round(x));
     } else if (hasCenter) {
-      x = (baseImg.width - logoW) / 2;
-      console.log('✅ X = CENTER:', x);
+      logoCenterX = baseImg.width / 2;
+      x = logoCenterX - (logoW / 2);
+      console.log('✅ CENTER: centerX =', Math.round(logoCenterX), '→ cornerX =', Math.round(x));
     } else {
-      x = baseImg.width - logoW + offX;
-      console.log('⚠️ X = DEFAULT (RIGHT):', x);
+      logoCenterX = baseImg.width - offX;
+      x = logoCenterX - (logoW / 2);
+      console.log('⚠️ DEFAULT RIGHT: centerX =', Math.round(logoCenterX), '→ cornerX =', Math.round(x));
     }
     
-    console.log('🎯 FINAL POSITION:', { x: Math.round(x), y: Math.round(y) });
-    
-    const logoCenterX = x + (logoW / 2);
-    const logoCenterY = y + (logoH / 2);
+    console.log('🎯 FINAL:', {
+      logoCenter: `(${Math.round(logoCenterX)}, ${Math.round(logoCenterY)})`,
+      logoCorner: `(${Math.round(x)}, ${Math.round(y)})`,
+      distFromCenterToTop: Math.round(logoCenterY),
+      distFromCenterToRight: Math.round(baseImg.width - logoCenterX),
+      distFromCenterToBottom: Math.round(baseImg.height - logoCenterY),
+      distFromCenterToLeft: Math.round(logoCenterX)
+    });
     
     ctx.drawImage(logoImg, x, y, logoW, logoH);
     
@@ -135,7 +151,7 @@ app.post('/combine', async (req, res) => {
         position: pos,
         logoCorner: { x: Math.round(x), y: Math.round(y) },
         logoCenter: { x: Math.round(logoCenterX), y: Math.round(logoCenterY) },
-        distanceFromCenter: {
+        distanceFromCenterToEdges: {
           top: Math.round(logoCenterY),
           bottom: Math.round(baseImg.height - logoCenterY),
           left: Math.round(logoCenterX),
@@ -153,18 +169,18 @@ app.post('/combine', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({ 
-    status: 'API v8.0 - Zero Limits',
+    status: 'API v9.0 - Center-Based Positioning',
     usage: {
-      offsetX: 'Positive values move logo AWAY from edge (can go outside)',
-      offsetY: 'Positive values move logo AWAY from edge (can go outside)',
+      offsetX: 'Distance from logo CENTER to horizontal edge (pixels)',
+      offsetY: 'Distance from logo CENTER to vertical edge (pixels)',
       examples: {
-        'offsetX: 0, offsetY: 0': 'Logo touches edge',
-        'offsetX: -50, offsetY: -50': 'Logo overlaps edge by 50px',
-        'offsetX: 100, offsetY: 100': 'Logo 100px inside from edge'
+        'top-right with offsetX:100, offsetY:50': 'Logo center is 100px from RIGHT edge, 50px from TOP edge',
+        'bottom-left with offsetX:0, offsetY:0': 'Logo center touches BOTTOM-LEFT corner',
+        'top-right with offsetX:-50, offsetY:50': 'Logo center 50px PAST right edge (chopped), 50px from top'
       }
     }
   });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Zero Limits API on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Center-Based API on port ${PORT}`));
