@@ -32,11 +32,12 @@ app.post('/combine', async (req, res) => {
       position = 'bottom-right'
     } = req.body;
     
-    console.log('Received params:', {
+    console.log('📥 Received params:', {
       logoSize,
       paddingX,
       paddingY,
-      position
+      position,
+      positionType: typeof position
     });
     
     // Support both base64 and URLs
@@ -52,6 +53,16 @@ app.post('/combine', async (req, res) => {
     
     // Check if position is 'none'
     const pos = position.toLowerCase().trim();
+    console.log('🔍 Position processed:', {
+      original: position,
+      processed: pos,
+      includesTop: pos.includes('top'),
+      includesBottom: pos.includes('bottom'),
+      includesLeft: pos.includes('left'),
+      includesRight: pos.includes('right'),
+      includesCenter: pos.includes('center')
+    });
+    
     if (pos === 'none') {
       const baseImg = await loadImage(baseBuffer);
       const canvas = createCanvas(baseImg.width, baseImg.height);
@@ -82,45 +93,60 @@ app.post('/combine', async (req, res) => {
     const logoW = baseImg.width * (Number(logoSize) / 100);
     const logoH = (logoImg.height / logoImg.width) * logoW;
     
-    // ✅ NO MIN PADDING - Use values directly as provided
+    // NO MIN PADDING - Use values directly as provided
     const padX = Number(paddingX);
     const padY = Number(paddingY);
     
-    console.log('Calculated:', {
+    console.log('📐 Calculated dimensions:', {
       baseWidth: baseImg.width,
       baseHeight: baseImg.height,
-      logoW,
-      logoH,
+      logoW: Math.round(logoW),
+      logoH: Math.round(logoH),
       padX,
       padY
     });
     
-    // Position calculation
+    // Position calculation with debug logging
     let x, y;
     
+    // Calculate Y position (vertical)
     if (pos.includes('top')) {
       y = padY;
+      console.log('✅ Y = TOP:', y);
     } else if (pos.includes('bottom')) {
       y = baseImg.height - logoH - padY;
+      console.log('✅ Y = BOTTOM:', y);
     } else if (pos.includes('center') || pos.includes('middle')) {
       y = (baseImg.height - logoH) / 2 + padY;
+      console.log('✅ Y = CENTER:', y);
     } else {
-      // Default bottom
-      y = baseImg.height - logoH - padY;
+      // Default to TOP if nothing matches
+      y = padY;
+      console.log('⚠️ Y = DEFAULT (TOP):', y);
     }
     
+    // Calculate X position (horizontal)
     if (pos.includes('left')) {
       x = padX;
+      console.log('✅ X = LEFT:', x);
     } else if (pos.includes('right')) {
       x = baseImg.width - logoW - padX;
+      console.log('✅ X = RIGHT:', x);
     } else if (pos.includes('center') || pos.includes('middle')) {
       x = (baseImg.width - logoW) / 2 + padX;
+      console.log('✅ X = CENTER:', x);
     } else {
-      // Default right
+      // Default to RIGHT if nothing matches
       x = baseImg.width - logoW - padX;
+      console.log('⚠️ X = DEFAULT (RIGHT):', x);
     }
     
-    console.log('Final position:', { x, y, position: pos });
+    console.log('🎯 Final position calculated:', { 
+      x: Math.round(x), 
+      y: Math.round(y),
+      willDrawAt: `(${Math.round(x)}, ${Math.round(y)})`,
+      logoSize: `${Math.round(logoW)}x${Math.round(logoH)}`
+    });
     
     // Draw logo
     ctx.drawImage(logoImg, x, y, logoW, logoH);
@@ -138,11 +164,12 @@ app.post('/combine', async (req, res) => {
         finalX: Math.round(x),
         finalY: Math.round(y),
         logoWidth: Math.round(logoW),
-        logoHeight: Math.round(logoH)
+        logoHeight: Math.round(logoH),
+        baseImageSize: `${baseImg.width}x${baseImg.height}`
       }
     });
   } catch (error) {
-    console.error('Error:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
@@ -150,12 +177,13 @@ app.post('/combine', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     status: 'Image combiner API running',
-    version: '4.0.0 (No Min Padding)',
+    version: '4.1.0 (No Min Padding + Debug)',
     features: [
       '✅ Base64 and URL support for both images',
       '✅ Flexible positioning (9 positions + none)',
       '✅ Logo size as percentage of base width',
       '✅ Full padding control - no restrictions',
+      '✅ Detailed debug logging',
       '⚠️ Warning: Logo may be cut off with paddingX/Y = 0 or negative values'
     ],
     usage: {
@@ -187,36 +215,25 @@ app.get('/', (req, res) => {
       ],
       examples: [
         {
-          description: 'Logo exactly at top-right corner (may be cut off)',
+          description: 'Logo at top-right corner with no padding',
           body: {
             baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 15,
+            logoSize: 70,
             paddingX: 0,
             paddingY: 0,
             position: 'top-right'
           }
         },
         {
-          description: 'Logo with safe 30px padding',
+          description: 'Logo with safe padding at top-right',
           body: {
             baseImageUrl: 'https://example.com/bg.jpg',
             logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 15,
+            logoSize: 70,
             paddingX: 30,
-            paddingY: 30,
+            paddingY: 10,
             position: 'top-right'
-          }
-        },
-        {
-          description: 'Logo moved slightly outside frame (negative padding)',
-          body: {
-            baseImageUrl: 'https://example.com/bg.jpg',
-            logoImageUrl: 'https://example.com/logo.png',
-            logoSize: 12,
-            paddingX: -10,
-            paddingY: -5,
-            position: 'bottom-right'
           }
         }
       ]
@@ -225,4 +242,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Image Combiner API v4.0 (No Min Padding) running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Image Combiner API v4.1 (Debug Mode) running on port ${PORT}`));
